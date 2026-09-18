@@ -4,9 +4,16 @@ import { Client as LangGraphClient } from "@langchain/langgraph-sdk/client";
 
 import { getLangGraphBaseURL } from "../config";
 
-import { sanitizeRunStreamOptions } from "./stream-mode";
+import {
+  joinRunStreamWithStatusGuard,
+  sanitizeRunStreamOptions,
+  type StreamProfile,
+} from "./stream-mode";
 
-function createCompatibleClient(isMock?: boolean): LangGraphClient {
+function createCompatibleClient(
+  isMock?: boolean,
+  streamProfile: StreamProfile = "default",
+): LangGraphClient {
   const client = new LangGraphClient({
     apiUrl: getLangGraphBaseURL(isMock),
   });
@@ -16,22 +23,36 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
     originalRunStream(
       threadId,
       assistantId,
-      sanitizeRunStreamOptions(payload),
+      sanitizeRunStreamOptions(payload, streamProfile),
     )) as typeof client.runs.stream;
 
   const originalJoinStream = client.runs.joinStream.bind(client.runs);
-  client.runs.joinStream = ((threadId, runId, options) =>
-    originalJoinStream(
-      threadId,
-      runId,
-      sanitizeRunStreamOptions(options),
-    )) as typeof client.runs.joinStream;
+  client.runs.joinStream = ((threadId, runId, options) => {
+    const sanitizedOptions = sanitizeRunStreamOptions(options, streamProfile);
+    return joinRunStreamWithStatusGuard(
+      streamProfile,
+      async () =>
+        threadId
+          ? (await client.runs.get(threadId, runId)).status
+          : "unknown",
+      () => originalJoinStream(threadId, runId, sanitizedOptions),
+    );
+  }) as typeof client.runs.joinStream;
 
   return client;
 }
 
-let _singleton: LangGraphClient | null = null;
-export function getAPIClient(isMock?: boolean): LangGraphClient {
-  _singleton ??= createCompatibleClient(isMock);
-  return _singleton;
+const clients = new Map<string, LangGraphClient>();
+
+export function getAPIClient(
+  isMock?: boolean,
+  streamProfile: StreamProfile = "default",
+): LangGraphClient {
+  const key = `${isMock ? "mock" : "live"}:${streamProfile}`;
+  let client = clients.get(key);
+  if (!client) {
+    client = createCompatibleClient(isMock, streamProfile);
+    clients.set(key, client);
+  }
+  return client;
 }

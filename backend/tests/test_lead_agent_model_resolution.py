@@ -110,6 +110,85 @@ def test_make_lead_agent_disables_thinking_when_model_does_not_support_it(monkey
     assert result["model"] is not None
 
 
+def test_make_procurement_agent_forces_cost_control_modes(monkeypatch):
+    app_config = _make_app_config([_make_model("thinking-model", supports_thinking=True)])
+
+    import deerflow.tools as tools_module
+
+    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "_build_middlewares", lambda config, model_name, agent_name=None: [])
+
+    captured: dict[str, object] = {}
+
+    def _fake_create_chat_model(*, name, thinking_enabled, reasoning_effort=None):
+        captured["name"] = name
+        captured["thinking_enabled"] = thinking_enabled
+        captured["reasoning_effort"] = reasoning_effort
+        return object()
+
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", _fake_create_chat_model)
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+
+    config = {
+        "configurable": {
+            "agent_name": "Procurement-Agent",
+            "model_name": "thinking-model",
+            "thinking_enabled": True,
+            "reasoning_effort": "high",
+            "is_plan_mode": True,
+            "subagent_enabled": True,
+        }
+    }
+    result = lead_agent_module.make_lead_agent(config)
+
+    assert captured == {
+        "name": "thinking-model",
+        "thinking_enabled": False,
+        "reasoning_effort": None,
+    }
+    assert config["metadata"]["thinking_enabled"] is False
+    assert config["metadata"]["is_plan_mode"] is False
+    assert config["metadata"]["subagent_enabled"] is False
+    assert result["model"] is not None
+
+
+def test_procurement_middlewares_reduce_context_cost(monkeypatch):
+    app_config = _make_app_config([_make_model("default-model", supports_thinking=False)])
+
+    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
+    monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
+
+    middlewares = lead_agent_module._build_middlewares(
+        {"configurable": {"is_plan_mode": False, "subagent_enabled": False}},
+        model_name="default-model",
+        agent_name="Procurement-Agent",
+    )
+
+    assert any(isinstance(middleware, lead_agent_module.ContextEditingMiddleware) for middleware in middlewares)
+    assert any(isinstance(middleware, lead_agent_module.TokenUsageMiddleware) for middleware in middlewares)
+    assert not any(isinstance(middleware, lead_agent_module.MemoryMiddleware) for middleware in middlewares)
+
+
+def test_default_agent_keeps_existing_memory_and_summarization(monkeypatch):
+    app_config = _make_app_config([_make_model("default-model", supports_thinking=False)])
+    summary = object()
+
+    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
+    monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda: summary)
+    monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
+
+    middlewares = lead_agent_module._build_middlewares(
+        {"configurable": {"is_plan_mode": False, "subagent_enabled": False}},
+        model_name="default-model",
+    )
+
+    assert summary in middlewares
+    assert any(isinstance(middleware, lead_agent_module.MemoryMiddleware) for middleware in middlewares)
+
+
 def test_build_middlewares_uses_resolved_model_name_for_vision(monkeypatch):
     app_config = _make_app_config(
         [

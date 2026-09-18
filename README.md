@@ -477,6 +477,18 @@ DEERFLOW_LANGGRAPH_URL=http://localhost:2026/api/langgraph  # LangGraph API
 
 See [`skills/public/claude-to-deerflow/SKILL.md`](skills/public/claude-to-deerflow/SKILL.md) for the full API reference.
 
+### Procurement Matching Workspace
+
+DeerFlow includes an MVP procurement workspace for building-material and fire-protection sourcing. Open `http://localhost:2026/workspace/procurement/new`, upload or paste a bill of quantities/BOM/procurement list, and the dedicated `procurement-agent` walks through:
+
+- Demand intake and missing-condition checks
+- Requirement standardization for material, specification, quantity, and unit
+- Public-web supplier sourcing and candidate comparison
+- Evidence verification with URLs and manual-confirmation flags
+- Procurement recommendation report export as Markdown and JSON
+
+The MVP uses public web search and fetch tools for supplier evidence. If qualification, authorization, price, inventory, or delivery cannot be verified from public sources, the workspace marks the item as pending manual confirmation instead of treating it as verified.
+
 ### Sub-Agents
 
 Complex tasks rarely fit in a single pass. DeerFlow decomposes them.

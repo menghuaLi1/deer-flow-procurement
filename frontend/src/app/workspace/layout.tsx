@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Toaster } from "sonner";
 
@@ -15,6 +16,8 @@ export default function WorkspaceLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [settings, setSettings] = useLocalSettings();
+  const pathname = usePathname();
+  const isProcurement = pathname.startsWith("/workspace/procurement");
   const [open, setOpen] = useState(false); // SSR default: open (matches server render)
   useLayoutEffect(() => {
     // Runs synchronously before first paint on the client — no visual flash
@@ -32,14 +35,22 @@ export default function WorkspaceLayout({
   );
   return (
     <QueryClientProvider client={queryClient}>
-      <SidebarProvider
-        className="h-screen"
-        open={open}
-        onOpenChange={handleOpenChange}
-      >
-        <WorkspaceSidebar />
-        <SidebarInset className="min-w-0">{children}</SidebarInset>
-      </SidebarProvider>
+      {isProcurement ? (
+        <SidebarProvider className="h-screen" open={false}>
+          <SidebarInset className="min-w-0 bg-[#f7f7f9] dark:bg-background">
+            {children}
+          </SidebarInset>
+        </SidebarProvider>
+      ) : (
+        <SidebarProvider
+          className="h-screen"
+          open={open}
+          onOpenChange={handleOpenChange}
+        >
+          <WorkspaceSidebar />
+          <SidebarInset className="min-w-0">{children}</SidebarInset>
+        </SidebarProvider>
+      )}
       <CommandPalette />
       <Toaster position="top-center" />
     </QueryClientProvider>

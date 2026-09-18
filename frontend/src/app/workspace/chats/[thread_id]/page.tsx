@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect } from "react";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 
 export default function ChatPage() {
   const { t } = useI18n();
+  const router = useRouter();
   const [settings, setSettings] = useLocalSettings();
 
   const { threadId, isNewThread, setIsNewThread, isMock } = useThreadChat();
@@ -60,6 +62,12 @@ export default function ChatPage() {
       }
     },
   });
+
+  useEffect(() => {
+    if (!isNewThread && thread.values.procurement) {
+      router.replace(`/workspace/procurement/${threadId}`);
+    }
+  }, [isNewThread, router, thread.values.procurement, threadId]);
 
   const handleSubmit = useCallback(
     (message: PromptInputMessage) => {

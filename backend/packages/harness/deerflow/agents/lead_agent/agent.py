@@ -1,7 +1,11 @@
 import logging
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import SummarizationMiddleware
+from langchain.agents.middleware import (
+    ClearToolUsesEdit,
+    ContextEditingMiddleware,
+    SummarizationMiddleware,
+)
 from langchain_core.runnables import RunnableConfig
 
 from deerflow.agents.lead_agent.prompt import apply_prompt_template
@@ -15,12 +19,15 @@ from deerflow.agents.middlewares.token_usage_middleware import TokenUsageMiddlew
 from deerflow.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
 from deerflow.agents.middlewares.view_image_middleware import ViewImageMiddleware
 from deerflow.agents.thread_state import ThreadState
-from deerflow.config.agents_config import load_agent_config
+from deerflow.config.agents_config import PROCUREMENT_AGENT_NAME, load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.summarization_config import get_summarization_config
 from deerflow.models import create_chat_model
 
 logger = logging.getLogger(__name__)
+
+def _is_procurement_agent(agent_name: str | None) -> bool:
+    return bool(agent_name and agent_name.lower() == PROCUREMENT_AGENT_NAME)
 
 
 def _resolve_model_name(requested_model_name: str | None = None) -> str:
@@ -216,11 +223,33 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
         List of middleware instances.
     """
     middlewares = build_lead_runtime_middlewares(lazy_init=True)
+    is_procurement_agent = _is_procurement_agent(agent_name)
 
-    # Add summarization middleware if enabled
-    summarization_middleware = _create_summarization_middleware()
-    if summarization_middleware is not None:
-        middlewares.append(summarization_middleware)
+    if is_procurement_agent:
+        # Procurement tool results contain large tables and web pages. Prune old
+        # tool payloads deterministically instead of paying for an LLM summary on
+        # almost every model turn.
+        middlewares.extend(
+            [
+                ContextEditingMiddleware(
+                    edits=[
+                        ClearToolUsesEdit(
+                            trigger=12_000,
+                            clear_at_least=6_000,
+                            keep=4,
+                            clear_tool_inputs=True,
+                        )
+                    ]
+                ),
+            ]
+        )
+
+    # Procurement uses deterministic context editing above. Other agents retain
+    # the existing conversational summarization behavior.
+    if not is_procurement_agent:
+        summarization_middleware = _create_summarization_middleware()
+        if summarization_middleware is not None:
+            middlewares.append(summarization_middleware)
 
     # Add TodoList middleware if plan mode is enabled
     is_plan_mode = config.get("configurable", {}).get("is_plan_mode", False)
@@ -229,14 +258,16 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
         middlewares.append(todo_list_middleware)
 
     # Add TokenUsageMiddleware when token_usage tracking is enabled
-    if get_app_config().token_usage.enabled:
+    if is_procurement_agent or get_app_config().token_usage.enabled:
         middlewares.append(TokenUsageMiddleware())
 
     # Add TitleMiddleware
     middlewares.append(TitleMiddleware())
 
-    # Add MemoryMiddleware (after TitleMiddleware)
-    middlewares.append(MemoryMiddleware(agent_name=agent_name))
+    # Procurement cases stay in thread checkpoints and should not trigger an
+    # additional LLM call to write project-specific data into long-term memory.
+    if not is_procurement_agent:
+        middlewares.append(MemoryMiddleware(agent_name=agent_name))
 
     # Add ViewImageMiddleware only if the current model supports vision.
     # Use the resolved runtime model_name from make_lead_agent to avoid stale config values.
@@ -280,6 +311,12 @@ def make_lead_agent(config: RunnableConfig):
     max_concurrent_subagents = cfg.get("max_concurrent_subagents", 3)
     is_bootstrap = cfg.get("is_bootstrap", False)
     agent_name = cfg.get("agent_name")
+
+    if _is_procurement_agent(agent_name):
+        thinking_enabled = False
+        reasoning_effort = None
+        is_plan_mode = False
+        subagent_enabled = False
 
     agent_config = load_agent_config(agent_name) if not is_bootstrap else None
     # Custom agent model or fallback to global/default model resolution

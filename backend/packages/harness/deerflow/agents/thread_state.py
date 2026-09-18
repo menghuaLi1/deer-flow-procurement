@@ -1,4 +1,4 @@
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langchain.agents import AgentState
 
@@ -45,6 +45,18 @@ def merge_viewed_images(existing: dict[str, ViewedImageData] | None, new: dict[s
     return {**existing, **new}
 
 
+def replace_procurement_state(existing: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, Any]:
+    """Reducer for procurement workspace state.
+
+    Procurement state is authored by domain tools as a coherent case snapshot.
+    Replacing the top-level object avoids stale candidates or evidence lingering
+    after the agent reruns a stage.
+    """
+    if new is None:
+        return existing or {}
+    return new
+
+
 class ThreadState(AgentState):
     sandbox: NotRequired[SandboxState | None]
     thread_data: NotRequired[ThreadDataState | None]
@@ -53,3 +65,4 @@ class ThreadState(AgentState):
     todos: NotRequired[list | None]
     uploaded_files: NotRequired[list[dict] | None]
     viewed_images: Annotated[dict[str, ViewedImageData], merge_viewed_images]  # image_path -> {base64, mime_type}
+    procurement: Annotated[dict[str, Any], replace_procurement_state]

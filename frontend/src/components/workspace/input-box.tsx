@@ -108,6 +108,7 @@ export function InputBox({
   isNewThread,
   threadId,
   initialValue,
+  placeholder,
   onContextChange,
   onSubmit,
   onStop,
@@ -127,6 +128,7 @@ export function InputBox({
   isNewThread?: boolean;
   threadId: string;
   initialValue?: string;
+  placeholder?: string;
   onContextChange?: (
     context: Omit<
       AgentThreadContext,
@@ -407,7 +409,7 @@ export function InputBox({
           <PromptInputTextarea
             className={cn("size-full")}
             disabled={disabled}
-            placeholder={t.inputBox.placeholder}
+            placeholder={placeholder ?? t.inputBox.placeholder}
             autoFocus={autoFocus}
             defaultValue={initialValue}
           />

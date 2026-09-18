@@ -109,6 +109,7 @@ export interface Translations {
     chats: string;
     demoChats: string;
     agents: string;
+    procurement: string;
   };
 
   // Agents

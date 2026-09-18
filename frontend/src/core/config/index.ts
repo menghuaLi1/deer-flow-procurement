@@ -1,10 +1,19 @@
 import { env } from "@/env";
 
+const DEFAULT_CLIENT_ORIGIN = "http://localhost:3000";
+
+function getClientOrigin() {
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return DEFAULT_CLIENT_ORIGIN;
+}
+
 export function getBackendBaseURL() {
   if (env.NEXT_PUBLIC_BACKEND_BASE_URL) {
     return new URL(
       env.NEXT_PUBLIC_BACKEND_BASE_URL,
-      window.location.origin,
+      getClientOrigin(),
     ).toString();
   } else {
     return "";
@@ -15,7 +24,7 @@ export function getLangGraphBaseURL(isMock?: boolean) {
   if (env.NEXT_PUBLIC_LANGGRAPH_BASE_URL) {
     return new URL(
       env.NEXT_PUBLIC_LANGGRAPH_BASE_URL,
-      window.location.origin,
+      getClientOrigin(),
     ).toString();
   } else if (isMock) {
     if (typeof window !== "undefined") {

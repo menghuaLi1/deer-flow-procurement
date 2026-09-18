@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 
 import { getAPIClient } from "../api";
+import type { StreamProfile } from "../api/stream-mode";
 import { getBackendBaseURL } from "../config";
 import { useI18n } from "../i18n/hooks";
 import type { FileInMessage } from "../messages/utils";
@@ -30,6 +31,7 @@ export type ThreadStreamOptions = {
   onStart?: (threadId: string) => void;
   onFinish?: (state: AgentThreadState) => void;
   onToolEnd?: (event: ToolEndEvent) => void;
+  streamProfile?: StreamProfile;
 };
 
 function getStreamErrorMessage(error: unknown): string {
@@ -62,6 +64,7 @@ export function useThreadStream({
   onStart,
   onFinish,
   onToolEnd,
+  streamProfile = "default",
 }: ThreadStreamOptions) {
   const { t } = useI18n();
   // Track the thread ID that is currently streaming to handle thread changes during streaming
@@ -111,11 +114,12 @@ export function useThreadStream({
   const updateSubtask = useUpdateSubtask();
 
   const thread = useStream<AgentThreadState>({
-    client: getAPIClient(isMock),
+    client: getAPIClient(isMock, streamProfile),
     assistantId: "lead_agent",
     threadId: onStreamThreadId,
     reconnectOnMount: true,
     fetchStateHistory: { limit: 1 },
+    throttle: streamProfile === "compact" ? 100 : undefined,
     onCreated(meta) {
       handleStreamStart(meta.thread_id);
       setOnStreamThreadId(meta.thread_id);
@@ -128,11 +132,27 @@ export function useThreadStream({
         });
       }
     },
-    onUpdateEvent(data) {
+    onUpdateEvent(data, { mutate }) {
       const updates: Array<Partial<AgentThreadState> | null> = Object.values(
         data || {},
       );
       for (const update of updates) {
+        if (update && streamProfile === "compact") {
+          const compactUpdate: Partial<AgentThreadState> = {};
+          for (const key of [
+            "title",
+            "todos",
+            "artifacts",
+            "procurement",
+          ] as const) {
+            if (key in update) {
+              Object.assign(compactUpdate, { [key]: update[key] });
+            }
+          }
+          if (Object.keys(compactUpdate).length > 0) {
+            mutate(compactUpdate);
+          }
+        }
         if (update && "title" in update && update.title) {
           void queryClient.setQueriesData(
             {
@@ -204,6 +224,7 @@ export function useThreadStream({
       threadId: string,
       message: PromptInputMessage,
       extraContext?: Record<string, unknown>,
+      extraValues?: Partial<AgentThreadState>,
     ) => {
       if (sendInFlightRef.current) {
         return;
@@ -346,6 +367,7 @@ export function useThreadStream({
 
         await thread.submit(
           {
+            ...extraValues,
             messages: [
               {
                 type: "human",
@@ -362,7 +384,7 @@ export function useThreadStream({
           },
           {
             threadId: threadId,
-            streamSubgraphs: true,
+            streamSubgraphs: streamProfile !== "compact",
             streamResumable: true,
             config: {
               recursion_limit: 1000,
@@ -395,7 +417,14 @@ export function useThreadStream({
         sendInFlightRef.current = false;
       }
     },
-    [thread, _handleOnStart, t.uploads.uploadingFiles, context, queryClient],
+    [
+      thread,
+      _handleOnStart,
+      t.uploads.uploadingFiles,
+      context,
+      queryClient,
+      streamProfile,
+    ],
   );
 
   // Merge thread with optimistic messages for display

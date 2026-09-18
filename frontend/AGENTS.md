@@ -81,6 +81,8 @@ src/
 - `src/app/workspace/chats/[thread_id]/page.tsx` owns composer busy-state wiring.
 - `src/core/threads/hooks.ts` owns pre-submit upload state and thread submission.
 - `src/hooks/usePoseStream.ts` is a passive store selector; global WebSocket lifecycle stays in `App.tsx`.
+- `src/app/workspace/procurement/[thread_id]/page.tsx` owns the procurement workspace route. It reuses the normal thread stream, forces `agent_name=procurement-agent`, and renders structured procurement state from `thread.values.procurement`.
+- `src/components/workspace/procurement/procurement-workspace.tsx` owns procurement-specific tables and panels; do not parse chat text for procurement UI state.
 
 ## Resources
 

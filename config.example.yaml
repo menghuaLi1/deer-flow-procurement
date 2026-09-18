@@ -12,7 +12,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 3
+config_version: 4
 
 # ============================================================================
 # Logging
@@ -34,6 +34,24 @@ token_usage:
 # Configure available LLM models for the agent to use
 
 models:
+  # Example: DeepSeek V4 Flash model
+  # Put this entry first in your local config.yaml to make it the default model.
+  # - name: deepseek-v4-flash
+  #   display_name: DeepSeek V4 Flash
+  #   use: deerflow.models.patched_deepseek:PatchedChatDeepSeek
+  #   model: deepseek-v4-flash
+  #   base_url: https://api.deepseek.com
+  #   api_key: $DEEPSEEK_API_KEY
+  #   max_tokens: 8192
+  #   temperature: 0.7
+  #   supports_thinking: true
+  #   supports_reasoning_effort: true
+  #   supports_vision: false
+  #   when_thinking_enabled:
+  #     extra_body:
+  #       thinking:
+  #         type: enabled
+
   # Example: Volcengine (Doubao) model
   # - name: doubao-seed-1.8
   #   display_name: Doubao-Seed-1.8
@@ -110,14 +128,16 @@ models:
   #         type: enabled
 
   # Example: DeepSeek model (with thinking support)
-  # - name: deepseek-v3
-  #   display_name: DeepSeek V3 (Thinking)
+  # - name: deepseek-v4-flash
+  #   display_name: DeepSeek V4 Flash
   #   use: deerflow.models.patched_deepseek:PatchedChatDeepSeek
-  #   model: deepseek-reasoner
+  #   model: deepseek-v4-flash
+  #   base_url: https://api.deepseek.com
   #   api_key: $DEEPSEEK_API_KEY
   #   max_tokens: 8192
   #   supports_thinking: true
-  #   supports_vision: false  # DeepSeek V3 does not support vision
+  #   supports_reasoning_effort: true
+  #   supports_vision: false
   #   when_thinking_enabled:
   #     extra_body:
   #       thinking:
@@ -224,6 +244,7 @@ tool_groups:
   - name: file:read
   - name: file:write
   - name: bash
+  - name: procurement
 
 # ============================================================================
 # Tools Configuration
@@ -300,6 +321,19 @@ tools:
   - name: str_replace
     group: file:write
     use: deerflow.sandbox.tools:str_replace_tool
+
+  # Procurement matching workspace tools
+  - name: procurement_parse_requirements
+    group: procurement
+    use: deerflow.procurement.tools:procurement_parse_requirements_tool
+
+  - name: procurement_save_state
+    group: procurement
+    use: deerflow.procurement.tools:procurement_save_state_tool
+
+  - name: procurement_render_report
+    group: procurement
+    use: deerflow.procurement.tools:procurement_render_report_tool
 
   # Bash execution tool
   - name: bash
@@ -473,19 +507,16 @@ summarization:
   # Context retention policy after summarization
   # Specifies how much recent history to preserve
   keep:
-    # Keep the most recent 10 messages (recommended)
-    type: messages
-    value: 10
-    # Alternative: Keep specific token count
-    # type: tokens
-    # value: 3000
+    # A token budget is safer when tool messages contain large documents.
+    type: tokens
+    value: 3000
     # Alternative: Keep percentage of model's max input tokens
     # type: fraction
     # value: 0.3
 
   # Maximum tokens to keep when preparing messages for summarization
   # Set to null to skip trimming (not recommended for very long conversations)
-  trim_tokens_to_summarize: 15564
+  trim_tokens_to_summarize: 8000
 
   # Custom summary prompt template (null = use default LangChain prompt)
   # The prompt should guide the model to extract important context
